@@ -17,18 +17,19 @@ const (
 )
 
 type Order struct {
-	ID              models.ID
-	BotID           models.ID
-	Symbol          string
-	Quantity        decimal.Decimal
-	QuoteAmount     decimal.Decimal
-	EntryPrice      decimal.Decimal
-	TakeProfitPrice decimal.Decimal
-	ExternalId      *string
-	Status          string
-	PriceRange      int
-	Timestamps      models.Timestamps
-	Version         models.Version
+	ID                 models.ID
+	BotID              models.ID
+	Symbol             string
+	Quantity           decimal.Decimal
+	InitialQuoteAmount decimal.Decimal
+	FinalQuoteAmount   decimal.Decimal
+	EntryPrice         decimal.Decimal
+	TakeProfitPrice    decimal.Decimal
+	ExternalId         *string
+	Status             string
+	PriceRange         int
+	Timestamps         models.Timestamps
+	Version            models.Version
 }
 
 func NewOrder(
@@ -36,7 +37,8 @@ func NewOrder(
 	botID models.ID,
 	symbol string,
 	quantity decimal.Decimal,
-	quoteAmount decimal.Decimal,
+	initialQuoteAmount decimal.Decimal,
+	finalQuoteAmount decimal.Decimal,
 	entryPrice decimal.Decimal,
 	takeProfitPrice decimal.Decimal,
 	externalId *string,
@@ -46,18 +48,19 @@ func NewOrder(
 	version models.Version,
 ) (*Order, error) {
 	entity := &Order{
-		ID:              id,
-		BotID:           botID,
-		Symbol:          symbol,
-		Quantity:        quantity,
-		QuoteAmount:     quoteAmount,
-		EntryPrice:      entryPrice,
-		TakeProfitPrice: takeProfitPrice,
-		ExternalId:      externalId,
-		Status:          status,
-		PriceRange:      priceRange,
-		Timestamps:      timestamps,
-		Version:         version,
+		ID:                 id,
+		BotID:              botID,
+		Symbol:             symbol,
+		Quantity:           quantity,
+		InitialQuoteAmount: initialQuoteAmount,
+		FinalQuoteAmount:   finalQuoteAmount,
+		EntryPrice:         entryPrice,
+		TakeProfitPrice:    takeProfitPrice,
+		ExternalId:         externalId,
+		Status:             status,
+		PriceRange:         priceRange,
+		Timestamps:         timestamps,
+		Version:            version,
 	}
 
 	return entity, nil

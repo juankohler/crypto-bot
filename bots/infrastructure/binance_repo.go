@@ -88,12 +88,10 @@ func (r *repository) GetPrice(ctx context.Context, baseCurrency string, quoteCur
 		return nil, errors.Wrap(domain.ErrInternal, err, fmt.Sprintf("failed to parse to entity. body: %s", string(res.Body())))
 	}
 
-	logs.Info(ctx, fmt.Sprintf("Precio BTC/USDT: %s", entity.Price))
-
 	return entity, nil
 }
 
-func (r *repository) CreateOrderInProvider(ctx context.Context, order *domain.Order) (string, error) {
-	logs.Info(ctx, fmt.Sprintf("Compra %s BTC a %s USDT (%s USDT)", order.Quantity.String(), order.EntryPrice.String(), order.QuoteAmount.String()))
+func (r *repository) CreateOrderInProvider(ctx context.Context, order *domain.Order, botName string) (string, error) {
+	logs.Info(ctx, fmt.Sprintf("%s: Compra %s BTC a %s USDT (%s USDT), take_profit_price: %s", botName, order.Quantity.String(), order.EntryPrice.String(), order.InitialQuoteAmount.String(), order.TakeProfitPrice.String()))
 	return models.GenerateUUID().String(), nil
 }

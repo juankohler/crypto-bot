@@ -18,19 +18,21 @@ type BotRepository interface {
 }
 
 type Bot struct {
-	ID               models.ID
-	Name             string
-	InitialCapital   decimal.Decimal
-	AvailableCapital decimal.Decimal
-	InvestedCapital  decimal.Decimal
-	TotalCapital     decimal.Decimal
-	Currency         string
-	TargetCurrency   string
-	Delta            decimal.Decimal
-	MonitorInterval  time.Duration
-	Timestamps       models.Timestamps
-	Version          models.Version
-	OpenOrders       []*Order
+	ID                   models.ID
+	Name                 string
+	TakeProfitPercentaje decimal.Decimal
+	InitialCapital       decimal.Decimal
+	AvailableCapital     decimal.Decimal
+	InvestedCapital      decimal.Decimal
+	TotalCapital         decimal.Decimal
+	Currency             string
+	TargetCurrency       string
+	Delta                decimal.Decimal
+	MonitorInterval      time.Duration
+	Timestamps           models.Timestamps
+	Version              models.Version
+	OpenOrders           []*Order
+	LastSalePrice        *decimal.Decimal
 
 	mu sync.Mutex
 }
@@ -40,6 +42,7 @@ func NewBot(
 	name string,
 	currency string,
 	targetCurrency string,
+	takeProfitPercentaje decimal.Decimal,
 	initialCapital decimal.Decimal,
 	availableCapital decimal.Decimal,
 	investedCapital decimal.Decimal,
@@ -47,23 +50,26 @@ func NewBot(
 	delta decimal.Decimal,
 	monitorInterval time.Duration,
 	openOrders []*Order,
+	lastSalePrice *decimal.Decimal,
 	timestamps models.Timestamps,
 	version models.Version,
 ) (*Bot, error) {
 	entity := &Bot{
-		ID:               id,
-		Name:             name,
-		InitialCapital:   initialCapital,
-		AvailableCapital: availableCapital,
-		InvestedCapital:  investedCapital,
-		TotalCapital:     totalCapital,
-		Currency:         currency,
-		TargetCurrency:   targetCurrency,
-		Delta:            delta,
-		MonitorInterval:  monitorInterval,
-		OpenOrders:       openOrders,
-		Timestamps:       timestamps,
-		Version:          version,
+		ID:                   id,
+		Name:                 name,
+		TakeProfitPercentaje: takeProfitPercentaje,
+		InitialCapital:       initialCapital,
+		AvailableCapital:     availableCapital,
+		InvestedCapital:      investedCapital,
+		TotalCapital:         totalCapital,
+		Currency:             currency,
+		TargetCurrency:       targetCurrency,
+		Delta:                delta,
+		MonitorInterval:      monitorInterval,
+		OpenOrders:           openOrders,
+		LastSalePrice:        lastSalePrice,
+		Timestamps:           timestamps,
+		Version:              version,
 	}
 
 	return entity, nil
@@ -78,6 +84,7 @@ func CreateBot(
 	name string,
 	currency string,
 	targetCurrency string,
+	takeProfitPercentaje decimal.Decimal,
 	initialCapital decimal.Decimal,
 	delta decimal.Decimal,
 	monitorInterval time.Duration,
@@ -91,12 +98,14 @@ func CreateBot(
 	investedCapital := decimal.NewFromFloat(0)
 	totalCapital := availableCapital.Add(investedCapital)
 	openOrders := []*Order{}
+	var lastSalePrice *decimal.Decimal
 
 	entity, err := NewBot(
 		id,
 		name,
-		targetCurrency,
 		currency,
+		targetCurrency,
+		takeProfitPercentaje,
 		initialCapital,
 		availableCapital,
 		investedCapital,
@@ -104,6 +113,7 @@ func CreateBot(
 		delta,
 		monitorInterval,
 		openOrders,
+		lastSalePrice,
 		models.CreateTimestamps(),
 		models.CreateVersion(),
 	)
@@ -118,7 +128,7 @@ func (s *Bot) CalculatePriceRange(currentPrice decimal.Decimal) int {
 	return int(currentPrice.Div(s.Delta).Floor().IntPart())
 }
 
-func (s *Bot) HasOpenOrder(priceRange int) bool {
+func (s *Bot) HasOpenOrderWithPriceRange(priceRange int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -130,10 +140,17 @@ func (s *Bot) HasOpenOrder(priceRange int) bool {
 	return false
 }
 
-func (s *Bot) GenerateOrder(currentPrice decimal.Decimal, priceRange int) (*Order, error) {
-	quoteAmount := s.InitialCapital.Div(decimal.NewFromFloat(100))
-	quantity := quoteAmount.Div(currentPrice)
-	takeProfit := currentPrice.Mul(decimal.NewFromFloat(1.02))
+func (s *Bot) HasOpenOrder() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return len(s.OpenOrders) > 0
+}
+
+func (s *Bot) GenerateOrder(currentPrice decimal.Decimal, priceRange int, initialQuoteAmount decimal.Decimal) (*Order, error) {
+	quantity := initialQuoteAmount.Div(currentPrice)
+	takeProfit := currentPrice.Add(currentPrice.Mul(s.TakeProfitPercentaje))
+	finalQuoteAmount := quantity.Mul(takeProfit)
 	status := OrderStatusPending
 	symbol := s.TargetCurrency + "/" + s.Currency
 	orderId, err := models.GenerateNanoID(14)
@@ -146,7 +163,8 @@ func (s *Bot) GenerateOrder(currentPrice decimal.Decimal, priceRange int) (*Orde
 		s.ID,
 		symbol,
 		quantity,
-		quoteAmount,
+		initialQuoteAmount,
+		finalQuoteAmount,
 		currentPrice,
 		takeProfit,
 		nil,
@@ -160,8 +178,8 @@ func (s *Bot) GenerateOrder(currentPrice decimal.Decimal, priceRange int) (*Orde
 	}
 
 	s.mu.Lock()
-	s.InvestedCapital = s.InvestedCapital.Add(newOrder.QuoteAmount)
-	s.AvailableCapital = s.AvailableCapital.Sub(newOrder.QuoteAmount)
+	s.InvestedCapital = s.InvestedCapital.Add(newOrder.InitialQuoteAmount)
+	s.AvailableCapital = s.AvailableCapital.Sub(newOrder.InitialQuoteAmount)
 	s.TotalCapital = s.InvestedCapital.Add(s.AvailableCapital)
 	s.OpenOrders = append(s.OpenOrders, newOrder)
 	s.mu.Unlock()
@@ -169,21 +187,23 @@ func (s *Bot) GenerateOrder(currentPrice decimal.Decimal, priceRange int) (*Orde
 	return newOrder, nil
 }
 
-func (s *Bot) RemoveOrdersBelowPriceRange(ctx context.Context, priceRange int) {
+func (s *Bot) RemoveOrdersBelowPrice(ctx context.Context, price decimal.Decimal) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	var filteredOrders []*Order
 	for _, order := range s.OpenOrders {
-		if order.PriceRange >= priceRange {
+		if order.TakeProfitPrice.GreaterThan(price) {
 			filteredOrders = append(filteredOrders, order)
 		} else {
-			logs.Info(ctx, "VENTA", logs.NewAttr("order", order))
-			s.InvestedCapital = s.InvestedCapital.Sub(order.QuoteAmount)
-			s.AvailableCapital = s.AvailableCapital.Add(order.QuoteAmount)
+			logs.Info(ctx, fmt.Sprintf("%s: Venta %s BTC a %s USDT (%s USDT)", s.Name, order.Quantity.String(), order.TakeProfitPrice.String(), order.FinalQuoteAmount.String()))
+			s.InvestedCapital = s.InvestedCapital.Sub(order.InitialQuoteAmount)
+			s.AvailableCapital = s.AvailableCapital.Add(order.FinalQuoteAmount)
 			s.TotalCapital = s.InvestedCapital.Add(s.AvailableCapital)
+			lastSalePrice := price
+			s.LastSalePrice = &lastSalePrice
 
-			logs.Info(ctx, fmt.Sprintf("SALDO TOTAL: %s", s.TotalCapital.String()))
+			logs.Info(ctx, fmt.Sprintf("%s: SALDO TOTAL: %s", s.Name, s.TotalCapital.String()))
 		}
 	}
 
