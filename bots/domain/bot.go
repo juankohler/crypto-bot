@@ -203,7 +203,9 @@ func (s *Bot) RemoveOrdersBelowPrice(ctx context.Context, price decimal.Decimal)
 			lastSalePrice := price
 			s.LastSalePrice = &lastSalePrice
 
-			logs.Info(ctx, fmt.Sprintf("%s: SALDO TOTAL: %s", s.Name, s.TotalCapital.String()))
+			println()
+			logs.Info(ctx, fmt.Sprintf("%s: Saldo total %s", s.Name, s.TotalCapital.String()))
+			println()
 		}
 	}
 

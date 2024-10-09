@@ -17,8 +17,6 @@ func BuildDependencies(cfg *common.Config, commonDeps *common.Dependencies) (*De
 		Format: logs.FormatPretty,
 	})
 
-	
-
 	/** Infraestruture dependencies */
 	binanceRepo, err := infrastructure.NewBinanceRepo(&cfg.BinanceRepo)
 	if err != nil {
