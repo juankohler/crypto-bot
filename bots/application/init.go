@@ -101,7 +101,7 @@ func (s *Init) executeJuanchoStrategy(ctx context.Context, bot *domain.Bot, curr
 		return nil
 	}
 
-	quoteAmount := bot.InitialCapital.Div(decimal.NewFromFloat(100))
+	quoteAmount := bot.InitialCapital.Div(decimal.NewFromFloat(50))
 	newOrder, err := bot.GenerateOrder(currentPrice, priceRange, quoteAmount)
 	if err != nil {
 		return errors.Wrap(domain.ErrInternal, err, "could not generate order")
